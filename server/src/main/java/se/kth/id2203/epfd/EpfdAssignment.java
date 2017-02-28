@@ -21,29 +21,18 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package se.kth.id2203.client;
+package se.kth.id2203.epfd;
 
-import se.kth.id2203.kvstore.ClientService;
+import java.util.Collection;
+
 import se.kth.id2203.networking.NetAddress;
-import se.sics.kompics.Channel;
-import se.sics.kompics.Component;
-import se.sics.kompics.ComponentDefinition;
-import se.sics.kompics.Init;
-import se.sics.kompics.network.Network;
-import se.sics.kompics.network.netty.NettyInit;
-import se.sics.kompics.network.netty.NettyNetwork;
-import se.sics.kompics.timer.Timer;
-import se.sics.kompics.timer.java.JavaTimer;
+import se.sics.kompics.KompicsEvent;
 
-public class ParentComponent extends ComponentDefinition {
+public class EpfdAssignment implements KompicsEvent {
 
-    final NetAddress self = config().getValue("id2203.project.address", NetAddress.class);
-    protected final Component timer = create(JavaTimer.class, Init.NONE);
-    protected final Component net = create(NettyNetwork.class, new NettyInit(self));
-    protected final Component client = create(ClientService.class, Init.NONE);
+    public final Collection<NetAddress> assignment;
 
-    {
-        connect(timer.getPositive(Timer.class), client.getNegative(Timer.class), Channel.TWO_WAY);
-        connect(net.getPositive(Network.class), client.getNegative(Network.class), Channel.TWO_WAY);
+    public EpfdAssignment(final Collection<NetAddress> assignment) {
+        this.assignment = assignment;
     }
 }

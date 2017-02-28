@@ -23,6 +23,7 @@
  */
 package se.kth.id2203.bootstrapping;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import se.kth.id2203.networking.NetAddress;
 import se.sics.kompics.KompicsEvent;
@@ -30,8 +31,14 @@ import se.sics.kompics.KompicsEvent;
 public class GetInitialAssignments implements KompicsEvent {
 
     public final ImmutableSet<NetAddress> nodes;
+    public HashMultimap<Integer, NetAddress> replMap;
 
     public GetInitialAssignments(final ImmutableSet<NetAddress> nodes) {
         this.nodes = nodes;
+    }
+    
+    public GetInitialAssignments(final ImmutableSet<NetAddress> nodes, HashMultimap<Integer, NetAddress> replMap) {
+        this.nodes = nodes;
+        this.replMap = replMap;
     }
 }

@@ -23,14 +23,23 @@
  */
 package se.kth.id2203.overlay;
 
+import com.google.common.collect.HashMultimap;
 import com.larskroll.common.J6;
 import java.util.Collection;
+import java.util.HashSet;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Optional;
 import se.kth.id2203.bootstrapping.Booted;
 import se.kth.id2203.bootstrapping.Bootstrapping;
 import se.kth.id2203.bootstrapping.GetInitialAssignments;
 import se.kth.id2203.bootstrapping.InitialAssignments;
+import se.kth.id2203.epfd.EpfdAssignment;
+import se.kth.id2203.epfd.FDPort;
+import se.kth.id2203.epfd.Restore;
+import se.kth.id2203.epfd.Suspect;
 import se.kth.id2203.networking.Message;
 import se.kth.id2203.networking.NetAddress;
 import se.sics.kompics.ClassMatchedHandler;
@@ -59,16 +68,20 @@ public class VSOverlayManager extends ComponentDefinition {
     protected final Positive<Bootstrapping> boot = requires(Bootstrapping.class);
     protected final Positive<Network> net = requires(Network.class);
     protected final Positive<Timer> timer = requires(Timer.class);
+    protected final Positive<FDPort> epfd = requires(FDPort.class);
+    private HashMultimap<Integer, NetAddress> replMap = null;
+    private Collection<NetAddress> myGroup = null;
     //******* Fields ******
     final NetAddress self = config().getValue("id2203.project.address", NetAddress.class);
-    private LookupTable lut = null;
+    private LookupTable lut = null;    
     //******* Handlers ******
     protected final Handler<GetInitialAssignments> initialAssignmentHandler = new Handler<GetInitialAssignments>() {
 
         @Override
         public void handle(GetInitialAssignments event) {
-            LOG.info("Generating LookupTable...");
-            LookupTable lut = LookupTable.generate(event.nodes);
+            LOG.info("Generating LookupTable..." + event.replMap);
+            replMap = event.replMap;
+            LookupTable lut = LookupTable.generate(event.nodes, event.replMap);
             LOG.debug("Generated assignments:\n{}", lut);
             trigger(new InitialAssignments(lut), boot);
         }
@@ -80,6 +93,13 @@ public class VSOverlayManager extends ComponentDefinition {
             if (event.assignment instanceof LookupTable) {
                 LOG.info("Got NodeAssignment, overlay ready.");
                 lut = (LookupTable) event.assignment;
+                Optional<NetAddress> serverO = config().readValue("id2203.project.bootstrap-address", NetAddress.class);
+                if(serverO.isPresent()){
+                	LOG.info("My replication group:" + lut.lookup(config().getValue("id2203.project.keyRange-start", String.class)));
+                	myGroup = lut.lookup(config().getValue("id2203.project.keyRange-start", String.class));
+                	myGroup.remove(self);
+                	trigger(new EpfdAssignment(myGroup), epfd);
+                }                
             } else {
                 LOG.error("Got invalid NodeAssignment type. Expected: LookupTable; Got: {}", event.assignment.getClass());
             }
@@ -89,15 +109,12 @@ public class VSOverlayManager extends ComponentDefinition {
 
         @Override
         public void handle(RouteMsg content, Message context) {
-            Collection<NetAddress> partition = lut.lookup(content.key);
-            //NetAddress target = J6.randomElement(partition);
-            LOG.info("Broadcasting message to all nodes...");
+            Collection<NetAddress> partition = lut.lookup(content.key.split(":")[1]);            
+            LOG.info("Broadcasting message to the following nodes..." + partition);
             for(NetAddress target:partition){
             	LOG.info("Forwarding message for key {} to {}", content.key, target);
                 trigger(new Message(context.getSource(), target, content.msg), net);
             }
-//            LOG.info("Forwarding message for key {} to {}", content.key, target);
-//            trigger(new Message(context.getSource(), target, content.msg), net);
         }
     };
     protected final Handler<RouteMsg> localRouteHandler = new Handler<RouteMsg>() {
@@ -123,6 +140,21 @@ public class VSOverlayManager extends ComponentDefinition {
             }
         }
     };
+    
+    protected final Handler<Restore> restoreHandler = new Handler<Restore>() {
+
+        @Override
+        public void handle(Restore event) {
+        	LOG.info("{} restored",event.getNode());
+        }
+    };
+    
+    protected final Handler<Suspect> suspectHandler = new Handler<Suspect>() {
+        @Override
+        public void handle(Suspect event) {
+        	LOG.info("{} suspected",event.getNode());
+        }
+    };
 
     {
         subscribe(initialAssignmentHandler, boot);
@@ -130,5 +162,7 @@ public class VSOverlayManager extends ComponentDefinition {
         subscribe(routeHandler, net);
         subscribe(localRouteHandler, route);
         subscribe(connectHandler, net);
+        subscribe(restoreHandler, epfd);
+        subscribe(suspectHandler, epfd);
     }
 }

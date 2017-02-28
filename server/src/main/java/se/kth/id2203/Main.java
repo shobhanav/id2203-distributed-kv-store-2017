@@ -89,12 +89,15 @@ public class Main {
             
             if(cmd.hasOption("r")){ //range
             	int i = Integer.parseInt(cmd.getOptionValue("r"));
+            	if(i < 1){
+            		System.err.println("range should be greater or equal to 1: " + i);
+            		System.exit(1);
+            	}
             	int range_start = i*10;
             	int range_end = range_start + 9;
             	cb.setValue("id2203.project.keyRange-start", range_start);
-            	cb.setValue("id2203.project.keyRange-end", range_end);
-            	
-            }
+            	cb.setValue("id2203.project.keyRange-end", range_end);            	
+            }            
             ConfigUpdate cu = cb.finalise();
             c.apply(cu, ValueMerger.NONE);
 
@@ -121,7 +124,7 @@ public class Main {
         opts.addOption("c", true, "Run in client mode and connect to bootstrap server in <arg> (ip:port)");
         opts.addOption("p", true, "Change local port to <arg> (default from config file)");
         opts.addOption("i", true, "Change local ip to <arg> (default from config file)");
-        opts.addOption("r", true, "range decade for keys. e.g. 0 : 0-9, 1 : 10-19, 2 :20-29 etc ");
+        opts.addOption("r", true, "range decade for keys (1 or more). e.g. 1 : 10-19, 2 :20-29 etc ");        
         return opts;
     }
 }

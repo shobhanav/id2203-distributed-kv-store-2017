@@ -27,12 +27,18 @@ import java.util.HashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import se.kth.id2203.bootstrapping.GetInitialAssignments;
+import se.kth.id2203.bootstrapping.InitialAssignments;
 import se.kth.id2203.kvstore.OpResponse.Code;
 import se.kth.id2203.networking.Message;
 import se.kth.id2203.networking.NetAddress;
+import se.kth.id2203.overlay.LookupTable;
 import se.kth.id2203.overlay.Routing;
 import se.sics.kompics.ClassMatchedHandler;
 import se.sics.kompics.ComponentDefinition;
+import se.sics.kompics.Handler;
+import se.sics.kompics.Negative;
 import se.sics.kompics.Positive;
 import se.sics.kompics.network.Network;
 
@@ -46,6 +52,7 @@ public class KVService extends ComponentDefinition {
     //******* Ports ******
     protected final Positive<Network> net = requires(Network.class);
     protected final Positive<Routing> route = requires(Routing.class);
+    protected final Negative<ReplicationPort> rep = provides(ReplicationPort.class);
     
     private HashMap map;
     private int range_start =0;
@@ -72,13 +79,14 @@ public class KVService extends ComponentDefinition {
             			if(arr[0].equals("get"))
             				trigger(new Message(self, context.getSource(), new OpResponse(content.id, Code.OK,(int)map.get(key))), net);
             			else if(arr[0].equals("put")){
-            				map.put(key, key*1000);
-                			trigger(new Message(self, context.getSource(), new OpResponse(content.id, Code.OK,0)), net);
+            				int newVal = Integer.parseInt(arr[2]);
+            				map.put(key, newVal);
+                			trigger(new Message(self, context.getSource(), new OpResponse(content.id, Code.OK, newVal)), net);
             			}            				
             			else
             				trigger(new Message(self, context.getSource(), new OpResponse(content.id, Code.NOT_FOUND,0)), net);
                     }else{
-                    	LOG.info("Key {} outside my key range! ", key);
+                    	LOG.info("Key {} outside my key range! Ignoring request... ", key);
                     	return;
                     }            		
             	}
@@ -87,6 +95,14 @@ public class KVService extends ComponentDefinition {
             }
         }
 
+    };
+    
+    protected final Handler<ReplicationEvent> repHandler = new Handler<ReplicationEvent>() {
+
+        @Override
+        public void handle(ReplicationEvent event) {
+            LOG.info("Let me sync up my KV store with the replication group");      
+        }
     };
 
 	{
@@ -105,6 +121,7 @@ public class KVService extends ComponentDefinition {
 		}
 		
 		subscribe(opHandler, net);
+		subscribe(repHandler, rep);
 	}
 	
 	

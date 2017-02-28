@@ -23,6 +23,7 @@
  */
 package se.kth.id2203.bootstrapping;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import java.util.HashSet;
 import java.util.Set;
@@ -30,6 +31,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import se.kth.id2203.bootstrapping.BootstrapServer.State;
+import se.kth.id2203.kvstore.ReplicationPort;
+import se.kth.id2203.kvstore.ReplicationState;
 import se.kth.id2203.networking.Message;
 import se.kth.id2203.networking.NetAddress;
 import se.sics.kompics.ClassMatchedHandler;
@@ -50,13 +53,15 @@ public class BootstrapServer extends ComponentDefinition {
     protected final Negative<Bootstrapping> boot = provides(Bootstrapping.class);
     protected final Positive<Network> net = requires(Network.class);
     protected final Positive<Timer> timer = requires(Timer.class);
+    protected final Positive<ReplicationPort> rep = requires(ReplicationPort.class);
     //******* Fields ******
     final NetAddress self = config().getValue("id2203.project.address", NetAddress.class);
     final int bootThreshold = config().getValue("id2203.project.bootThreshold", Integer.class);
     private State state = State.COLLECTING;
     private UUID timeoutId;
     private final Set<NetAddress> active = new HashSet<>();
-    private final Set<NetAddress> ready = new HashSet<>();
+    private final Set<NetAddress> ready = new HashSet<>();   
+    private HashMultimap<Integer, NetAddress> replMap =  HashMultimap.create();
     private NodeAssignment initialAssignment = null;
     //******* Handlers ******
     protected final Handler<Start> startHandler = new Handler<Start>() {
@@ -68,7 +73,7 @@ public class BootstrapServer extends ComponentDefinition {
             spt.setTimeoutEvent(new BSTimeout(spt));
             trigger(spt, timer);
             timeoutId = spt.getTimeoutEvent().getTimeoutId();
-            active.add(self);
+            active.add(self);            
         }
     };
     protected final Handler<BSTimeout> timeoutHandler = new Handler<BSTimeout>() {
@@ -84,6 +89,7 @@ public class BootstrapServer extends ComponentDefinition {
                 if (ready.size() >= bootThreshold) {
                     LOG.info("Finished seeding. Bootstrapping complete.");
                     trigger(new Booted(initialAssignment), boot);
+                    LOG.info("Replication groups created: " + replMap.toString());
                     state = State.DONE;
                 }
             } else if (state == State.DONE) {
@@ -107,12 +113,20 @@ public class BootstrapServer extends ComponentDefinition {
         @Override
         public void handle(CheckIn content, Message context) {
             active.add(context.getSource());
+            replMap.put(content.range_start, context.getSource());
         }
     };
     protected final ClassMatchedHandler<Ready, Message> readyHandler = new ClassMatchedHandler<Ready, Message>() {
         @Override
         public void handle(Ready content, Message context) {
             ready.add(context.getSource());
+        }
+    };
+    
+    protected final Handler<ReplicationState> repHandler = new Handler<ReplicationState>() {
+        @Override
+        public void handle(ReplicationState e) {
+            LOG.info("received replication state: " + e.toString());            
         }
     };
 
@@ -122,6 +136,7 @@ public class BootstrapServer extends ComponentDefinition {
         subscribe(assignmentHandler, boot);
         subscribe(checkinHandler, net);
         subscribe(readyHandler, net);
+        subscribe(repHandler, rep);
     }
 
     @Override
@@ -132,7 +147,7 @@ public class BootstrapServer extends ComponentDefinition {
     private void bootUp() {
         LOG.info("Threshold reached. Generating assignments...");
         state = State.SEEDING;
-        trigger(new GetInitialAssignments(ImmutableSet.copyOf(active)), boot);
+        trigger(new GetInitialAssignments(ImmutableSet.copyOf(active), replMap), boot);
     }
 
     static enum State {

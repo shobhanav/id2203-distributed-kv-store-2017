@@ -4,7 +4,10 @@ import com.google.common.base.Optional;
 import se.kth.id2203.bootstrapping.BootstrapClient;
 import se.kth.id2203.bootstrapping.BootstrapServer;
 import se.kth.id2203.bootstrapping.Bootstrapping;
+import se.kth.id2203.epfd.EventuallyPerfectFailureDetector;
+import se.kth.id2203.epfd.FDPort;
 import se.kth.id2203.kvstore.KVService;
+import se.kth.id2203.kvstore.ReplicationPort;
 import se.kth.id2203.networking.NetAddress;
 import se.kth.id2203.overlay.Routing;
 import se.kth.id2203.overlay.VSOverlayManager;
@@ -25,6 +28,7 @@ public class ParentComponent
     //******* Children ******
     protected final Component overlay = create(VSOverlayManager.class, Init.NONE);
     protected final Component kv = create(KVService.class, Init.NONE);
+    protected final Component epfd = create(EventuallyPerfectFailureDetector.class, Init.NONE);
     protected final Component boot;
 
     {
@@ -43,5 +47,12 @@ public class ParentComponent
         // KV
         connect(overlay.getPositive(Routing.class), kv.getNegative(Routing.class), Channel.TWO_WAY);
         connect(net, kv.getNegative(Network.class), Channel.TWO_WAY);
+        connect(kv.getPositive(ReplicationPort.class),boot.getNegative(ReplicationPort.class), Channel.TWO_WAY);
+        
+        //epfd
+        connect(epfd.getPositive(FDPort.class), overlay.getNegative(FDPort.class), Channel.TWO_WAY);
+        connect(timer, epfd.getNegative(Timer.class), Channel.TWO_WAY);
+        connect(net, epfd.getNegative(Network.class), Channel.TWO_WAY);
+        
     }
 }

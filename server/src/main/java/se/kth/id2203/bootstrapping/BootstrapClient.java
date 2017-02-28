@@ -25,6 +25,9 @@ package se.kth.id2203.bootstrapping;
 
 import java.util.UUID;
 import org.slf4j.LoggerFactory;
+
+import se.kth.id2203.kvstore.ReplicationPort;
+import se.kth.id2203.kvstore.ReplicationState;
 import se.kth.id2203.networking.Message;
 import se.kth.id2203.networking.NetAddress;
 import se.sics.kompics.ClassMatchedHandler;
@@ -54,9 +57,12 @@ public class BootstrapClient extends ComponentDefinition {
     final Negative<Bootstrapping> bootstrap = provides(Bootstrapping.class);
     final Positive<Timer> timer = requires(Timer.class);
     final Positive<Network> net = requires(Network.class);
+    protected final Positive<ReplicationPort> rep = requires(ReplicationPort.class);
     //******* Fields ******
     private final NetAddress self = config().getValue("id2203.project.address", NetAddress.class);
-    private final NetAddress server = config().getValue("id2203.project.bootstrap-address", NetAddress.class);
+    private final NetAddress server = config().getValue("id2203.project.bootstrap-address", NetAddress.class);    
+    private int range_start =0;
+	private int range_end = 0;
 
     private State state = State.WAITING;
 
@@ -73,6 +79,9 @@ public class BootstrapClient extends ComponentDefinition {
             spt.setTimeoutEvent(new BSTimeout(spt));
             trigger(spt, timer);
             timeoutId = spt.getTimeoutEvent().getTimeoutId();
+            
+            range_start = config().getValue("id2203.project.keyRange-start", Integer.class);
+			range_end = config().getValue("id2203.project.keyRange-end", Integer.class);
         }
     };
     protected final Handler<BSTimeout> timeoutHandler = new Handler<BSTimeout>() {
@@ -81,7 +90,7 @@ public class BootstrapClient extends ComponentDefinition {
         public void handle(BSTimeout e) {
 
             if (state == State.WAITING) {
-                trigger(new Message(self, server, CheckIn.event), net);
+                trigger(new Message(self, server, new CheckIn(range_start)), net);
             } else if (state == State.STARTED) {
                 trigger(new Message(self, server, Ready.event), net);
                 suicide();
@@ -102,6 +111,13 @@ public class BootstrapClient extends ComponentDefinition {
             }
         }
     };
+    
+    protected final Handler<ReplicationState> repHandler = new Handler<ReplicationState>() {
+        @Override
+        public void handle(ReplicationState e) {
+            LOG.info("received replication state: " + e.toString());            
+        }
+    };
 
     @Override
     public void tearDown() {
@@ -112,5 +128,6 @@ public class BootstrapClient extends ComponentDefinition {
         subscribe(startHandler, control);
         subscribe(timeoutHandler, timer);
         subscribe(bootHandler, net);
+        subscribe(repHandler, rep);
     }
 }

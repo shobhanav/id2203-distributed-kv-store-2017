@@ -4,6 +4,7 @@ target/
 .classpath
 .settings/
 lib/
+bin/
 
 .DS_Store
 

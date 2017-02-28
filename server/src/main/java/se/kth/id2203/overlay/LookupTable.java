@@ -23,10 +23,13 @@
  */
 package se.kth.id2203.overlay;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.TreeMultimap;
 import java.util.Collection;
+import java.util.Set;
+
 import se.kth.id2203.bootstrapping.NodeAssignment;
 import se.kth.id2203.networking.NetAddress;
 
@@ -38,14 +41,15 @@ public class LookupTable implements NodeAssignment {
 
     private static final long serialVersionUID = -8766981433378303267L;
 
-    private final TreeMultimap<Integer, NetAddress> partitions = TreeMultimap.create();
+    private final TreeMultimap<Integer, NetAddress> partitions = TreeMultimap.create();    
 
     public Collection<NetAddress> lookup(String key) {
-        int keyHash = key.hashCode();
-        Integer partition = partitions.keySet().floor(keyHash);
-        if (partition == null) {
-            partition = partitions.keySet().last();
-        }
+    	Integer partition = (Integer.parseInt(key) / 10) * 10;
+//        int keyHash = key.hashCode();
+//        Integer partition = partitions.keySet().floor(keyHash);
+//        if (partition == null) {
+//            partition = partitions.keySet().last();
+//        }
         return partitions.get(partition);
     }
 
@@ -70,6 +74,17 @@ public class LookupTable implements NodeAssignment {
     static LookupTable generate(ImmutableSet<NetAddress> nodes) {
         LookupTable lut = new LookupTable();
         lut.partitions.putAll(0, nodes);
+        return lut;
+    }
+    
+    static LookupTable generate(ImmutableSet<NetAddress> nodes, HashMultimap<Integer, NetAddress> replMap) {
+        LookupTable lut = new LookupTable();
+        lut.partitions.putAll(0, nodes); //key 0 maps to all nodes in the distributed system
+        Set<Integer> keys = replMap.keySet();        
+        //put (replgrp -> nodes) // all non-zero keys map to group of nodes belonging to the replication group identified by the key
+        for(int key: keys){
+        	lut.partitions.putAll(key, replMap.get(key));
+        }
         return lut;
     }
 

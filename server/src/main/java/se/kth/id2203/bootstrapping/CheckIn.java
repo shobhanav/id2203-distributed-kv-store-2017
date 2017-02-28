@@ -24,13 +24,23 @@
 package se.kth.id2203.bootstrapping;
 
 import java.io.Serializable;
+
+import se.kth.id2203.networking.NetAddress;
+import se.sics.kompics.Kompics;
 import se.sics.kompics.KompicsEvent;
 
 public class CheckIn implements KompicsEvent, Serializable {
 
     public final static CheckIn event = new CheckIn();
-    private static final long serialVersionUID = -5044901955690784224L;
+    private static final long serialVersionUID = -5044901955690784224L;    
+    public final int range_start;    
 
     private CheckIn() {
+    	
+    	this.range_start = 0;    	
+    }
+    
+    public CheckIn(int range_start) {    	
+    	this.range_start = range_start;    	
     }
 }
