@@ -1,6 +1,9 @@
 package se.kth.id2203;
 
 import com.google.common.base.Optional;
+
+import se.kth.id2203.beb.BebComponent;
+import se.kth.id2203.beb.BebPort;
 import se.kth.id2203.bootstrapping.BootstrapClient;
 import se.kth.id2203.bootstrapping.BootstrapServer;
 import se.kth.id2203.bootstrapping.Bootstrapping;
@@ -8,6 +11,8 @@ import se.kth.id2203.epfd.EventuallyPerfectFailureDetector;
 import se.kth.id2203.epfd.FDPort;
 import se.kth.id2203.kvstore.KVService;
 import se.kth.id2203.kvstore.ReplicationPort;
+import se.kth.id2203.leaderdetection.LDPort;
+import se.kth.id2203.leaderdetection.MonarchicalEventualLeaderDetector;
 import se.kth.id2203.networking.NetAddress;
 import se.kth.id2203.overlay.Routing;
 import se.kth.id2203.overlay.VSOverlayManager;
@@ -29,6 +34,8 @@ public class ParentComponent
     protected final Component overlay = create(VSOverlayManager.class, Init.NONE);
     protected final Component kv = create(KVService.class, Init.NONE);
     protected final Component epfd = create(EventuallyPerfectFailureDetector.class, Init.NONE);
+    protected final Component ld = create(MonarchicalEventualLeaderDetector.class, Init.NONE);
+    protected final Component beb = create(BebComponent.class, Init.NONE);
     protected final Component boot;
 
     {
@@ -44,15 +51,25 @@ public class ParentComponent
         // Overlay
         connect(boot.getPositive(Bootstrapping.class), overlay.getNegative(Bootstrapping.class), Channel.TWO_WAY);
         connect(net, overlay.getNegative(Network.class), Channel.TWO_WAY);
+        connect(beb.getPositive(BebPort.class), overlay.getNegative(BebPort.class), Channel.TWO_WAY);
+        
         // KV
         connect(overlay.getPositive(Routing.class), kv.getNegative(Routing.class), Channel.TWO_WAY);
         connect(net, kv.getNegative(Network.class), Channel.TWO_WAY);
         connect(kv.getPositive(ReplicationPort.class),boot.getNegative(ReplicationPort.class), Channel.TWO_WAY);
+        connect(ld.getPositive(LDPort.class), kv.getNegative(LDPort.class), Channel.TWO_WAY);
+        connect(beb.getPositive(BebPort.class), kv.getNegative(BebPort.class), Channel.TWO_WAY);
         
         //epfd
         connect(epfd.getPositive(FDPort.class), overlay.getNegative(FDPort.class), Channel.TWO_WAY);
         connect(timer, epfd.getNegative(Timer.class), Channel.TWO_WAY);
         connect(net, epfd.getNegative(Network.class), Channel.TWO_WAY);
         
+        //leader detector
+        connect(ld.getPositive(LDPort.class), overlay.getNegative(LDPort.class), Channel.TWO_WAY);
+        connect(epfd.getPositive(FDPort.class), ld.getNegative(FDPort.class), Channel.TWO_WAY);       
+        
+        //beb
+        connect(net, beb.getNegative(Network.class), Channel.TWO_WAY);
     }
 }

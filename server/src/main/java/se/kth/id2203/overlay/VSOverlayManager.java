@@ -25,6 +25,8 @@ package se.kth.id2203.overlay;
 
 import com.google.common.collect.HashMultimap;
 import com.larskroll.common.J6;
+
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 
@@ -32,6 +34,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Optional;
+
+import se.kth.id2203.beb.BebPort;
+import se.kth.id2203.beb.BebRequest;
 import se.kth.id2203.bootstrapping.Booted;
 import se.kth.id2203.bootstrapping.Bootstrapping;
 import se.kth.id2203.bootstrapping.GetInitialAssignments;
@@ -40,6 +45,9 @@ import se.kth.id2203.epfd.EpfdAssignment;
 import se.kth.id2203.epfd.FDPort;
 import se.kth.id2203.epfd.Restore;
 import se.kth.id2203.epfd.Suspect;
+import se.kth.id2203.leaderdetection.LDPort;
+import se.kth.id2203.leaderdetection.LeaderDetectionAssignment;
+import se.kth.id2203.leaderdetection.Trust;
 import se.kth.id2203.networking.Message;
 import se.kth.id2203.networking.NetAddress;
 import se.sics.kompics.ClassMatchedHandler;
@@ -69,8 +77,11 @@ public class VSOverlayManager extends ComponentDefinition {
     protected final Positive<Network> net = requires(Network.class);
     protected final Positive<Timer> timer = requires(Timer.class);
     protected final Positive<FDPort> epfd = requires(FDPort.class);
+    protected final Positive<LDPort> ld = requires(LDPort.class);
+    protected final Positive<BebPort> beb = requires(BebPort.class);
     private HashMultimap<Integer, NetAddress> replMap = null;
     private Collection<NetAddress> myGroup = null;
+
     //******* Fields ******
     final NetAddress self = config().getValue("id2203.project.address", NetAddress.class);
     private LookupTable lut = null;    
@@ -99,6 +110,7 @@ public class VSOverlayManager extends ComponentDefinition {
                 	myGroup = lut.lookup(config().getValue("id2203.project.keyRange-start", String.class));
                 	myGroup.remove(self);
                 	trigger(new EpfdAssignment(myGroup), epfd);
+                	trigger(new LeaderDetectionAssignment(myGroup), ld);                	
                 }                
             } else {
                 LOG.error("Got invalid NodeAssignment type. Expected: LookupTable; Got: {}", event.assignment.getClass());
@@ -120,11 +132,16 @@ public class VSOverlayManager extends ComponentDefinition {
     protected final Handler<RouteMsg> localRouteHandler = new Handler<RouteMsg>() {
 
         @Override
-        public void handle(RouteMsg event) {
-            Collection<NetAddress> partition = lut.lookup(event.key);
-            NetAddress target = J6.randomElement(partition);
-            LOG.info("Routing message for key {} to {}", event.key, target);
-            trigger(new Message(self, target, event.msg), net);
+        public void handle(RouteMsg event) {        	
+        	if(event.msg instanceof Pair){
+        		Pair pair = (Pair)event.msg;
+        		LOG.info("Broadcasting to all nodes in the replication group");
+        		trigger(new BebRequest("put", pair.key, pair.value, 
+        				new ArrayList<NetAddress>(myGroup)), beb);
+        	}else{
+        		LOG.info("Unknown message");
+        	}        	
+            
         }
     };
     protected final ClassMatchedHandler<Connect, Message> connectHandler = new ClassMatchedHandler<Connect, Message>() {
@@ -140,29 +157,13 @@ public class VSOverlayManager extends ComponentDefinition {
             }
         }
     };
-    
-    protected final Handler<Restore> restoreHandler = new Handler<Restore>() {
-
-        @Override
-        public void handle(Restore event) {
-        	LOG.info("{} restored",event.getNode());
-        }
-    };
-    
-    protected final Handler<Suspect> suspectHandler = new Handler<Suspect>() {
-        @Override
-        public void handle(Suspect event) {
-        	LOG.info("{} suspected",event.getNode());
-        }
-    };
 
     {
         subscribe(initialAssignmentHandler, boot);
         subscribe(bootHandler, boot);
         subscribe(routeHandler, net);
         subscribe(localRouteHandler, route);
-        subscribe(connectHandler, net);
-        subscribe(restoreHandler, epfd);
-        subscribe(suspectHandler, epfd);
+        subscribe(connectHandler, net);        
+        
     }
 }
