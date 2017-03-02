@@ -1,0 +1,22 @@
+Instructions to run
+1. Import as a maven project.
+2. Update bootThreshold=10 in /resources/reference.conf. This means (1 Bootstrap server + 9 normal servers)
+3. Run maven install.
+4. Launch bootstrap server with the following command:
+	java -jar target/project17-server-1.0-SNAPSHOT-shaded.jar -p <port>
+5. Launch 9 normal servers each binding to a different port. (3 groups of 3 servers). Each group represents one replication group in which one server shall be automatically designated as leader node.
+	java -jar target/project17-server-1.0-SNAPSHOT-shaded.jar -p <port> -r <key range, see below> -c <bsip>:<bsport>
+	r=1 means key-range 10-19
+	r=2 means key-range 20-29
+	r=3 means key-range 30-39 and so on...
+
+
+The bootstrap server places servers with same key range into the same group. For e.g all servers with r=1 will be placed in the same group.
+
+6. Once the system is booted up, start the client
+	java -jar target/project17-client-1.0-SNAPSHOT-shaded.jar -p <port> -b <bsip>:<bsport>
+7. on the cli, one can run the following operations
+	op get:29 (Get value corresponding to key 29. All servers are hardcoded to return key*1000 as value unless the value is overwritten with a put operation)
+	op put:<key>:<new value> (put operation)
+	op cas:<key>:<old value>:<new value> (Compare and swap operation)
+
